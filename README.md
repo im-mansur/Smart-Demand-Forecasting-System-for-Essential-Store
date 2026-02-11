@@ -157,6 +157,10 @@ uvicorn main:app --reload --port 8000
 - Automated low-stock alerts  
 
 ---
+📸 Screenshots
+
+![Dashboard Preview](https://github.com/im-mansur/Farmly-Smart-Agri-Advisory-System/blob/main/preview.png)
+---
 
 ## 🎓 Project Type
 
