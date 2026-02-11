@@ -159,7 +159,7 @@ uvicorn main:app --reload --port 8000
 ---
 📸 Screenshots
 
-![Dashboard Preview](https://github.com/im-mansur/Farmly-Smart-Agri-Advisory-System/blob/main/preview.png)
+![Dashboard Preview](https://github.com/im-mansur/Smart-Demand-Forecasting-System-for-Essential-Store/blob/main/preview.png)
 ---
 
 ## 🎓 Project Type
