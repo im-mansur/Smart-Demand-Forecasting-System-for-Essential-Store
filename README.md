@@ -157,7 +157,7 @@ uvicorn main:app --reload --port 8000
 - Automated low-stock alerts  
 
 ---
-📸 Screenshots
+## 📸 Screenshots
 
 ![Dashboard Preview](https://github.com/im-mansur/Smart-Demand-Forecasting-System-for-Essential-Store/blob/main/preview.png)
 ---
