@@ -1,0 +1,1869 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StoreMind AI</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Poppins', 'sans-serif'],
+                    },
+                    colors: {
+                        primary: {
+                            DEFAULT: '#00C2FF',
+                            hover: '#009EDB',
+                            light: '#4FD1FF',
+                        },
+                        navy: {
+                            900: '#0B1C2D',
+                            800: '#121F36',
+                            700: '#1A2A4F',
+                        },
+                        slate: {
+                            100: '#FFFFFF',
+                            200: '#A0AEC0',
+                            300: '#6B7280',
+                        },
+                        accent: '#00C2FF',
+                        success: '#22C55E',
+                        warning: '#F59E0B',
+                        danger: '#EF4444',
+                    },
+                    boxShadow: {
+                        'premium': '0 0 15px rgba(0, 194, 255, 0.1)',
+                        'premium-hover': '0 0 25px rgba(0, 194, 255, 0.2)',
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Icons (Lucide) -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- IDB Library -->
+    <script src="https://unpkg.com/idb@7/build/umd.js"></script>
+    <!-- Internal DB Wrapper -->
+    <script>
+            (function () {
+                const DB_NAME = 'InventoryPredictorDB';
+                const DB_VERSION = 1;
+
+                const initDB = () => {
+                    if (!window.idb) {
+                        console.error("idb library not loaded!");
+                        return null;
+                    }
+
+                    const dbPromise = idb.openDB(DB_NAME, DB_VERSION, {
+                        upgrade(db) {
+                            if (!db.objectStoreNames.contains('users')) {
+                                db.createObjectStore('users', { keyPath: 'userId' });
+                            }
+                            if (!db.objectStoreNames.contains('products')) {
+                                const productStore = db.createObjectStore('products', { keyPath: 'productId' });
+                                productStore.createIndex('userId', 'userId', { unique: false });
+                            }
+                            if (!db.objectStoreNames.contains('sales')) {
+                                const salesStore = db.createObjectStore('sales', { keyPath: 'saleId', autoIncrement: true });
+                                salesStore.createIndex('productId', 'productId', { unique: false });
+                                salesStore.createIndex('userId', 'userId', { unique: false });
+                                salesStore.createIndex('date', 'date', { unique: false });
+                            }
+                            if (!db.objectStoreNames.contains('predictions')) {
+                                const predStore = db.createObjectStore('predictions', { keyPath: 'predictionId', autoIncrement: true });
+                                predStore.createIndex('productId', 'productId', { unique: false });
+                            }
+                            console.log("DB Upgraded/Created");
+                        },
+                    });
+
+                    return {
+                        async get(store, key) { return (await dbPromise).get(store, key); },
+                        async getAll(store) { return (await dbPromise).getAll(store); },
+                        async put(store, val) { return (await dbPromise).put(store, val); },
+                        async add(store, val) { return (await dbPromise).add(store, val); },
+                        async delete(store, key) { return (await dbPromise).delete(store, key); },
+                        async getFromIndex(store, index, key) { return (await dbPromise).getAllFromIndex(store, index, key); }
+                    };
+                };
+
+                // Initialize DB and expose it globally
+                window.DB = initDB();
+
+                // Re-attempt initialization if idb was slow to load
+                if (!window.DB) {
+                    const interval = setInterval(() => {
+                        if (window.idb) {
+                            window.DB = initDB();
+                            if (window.DB) clearInterval(interval);
+                        }
+                    }, 100);
+                    setTimeout(() => clearInterval(interval), 5000); // Stop after 5s
+                }
+            })();
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Poppins:wght@600;700;800&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0B1C2D;
+            color: #FFFFFF;
+        }
+
+        h1,
+        h2,
+        h3,
+        h4,
+        .font-display {
+            font-family: 'Poppins', sans-serif;
+        }
+
+        .glass {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .liquid-flow {
+            filter: url('#goo');
+        }
+
+        @keyframes organic-move {
+            0% {
+                transform: translate(0, 0) scale(1);
+            }
+
+            33% {
+                transform: translate(30px, -50px) scale(1.1);
+            }
+
+            66% {
+                transform: translate(-20px, 20px) scale(0.9);
+            }
+
+            100% {
+                transform: translate(0, 0) scale(1);
+            }
+        }
+
+        .liquid-blob {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(20px);
+            animation: organic-move 10s infinite alternate ease-in-out;
+        }
+
+        .ai-matte-glass {
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(25px) saturate(180%);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+    </style>
+</head>
+
+<body class="bg-slate-50 text-slate-900">
+    <div id="root"></div>
+
+    <svg style="visibility: hidden; position: absolute;" width="0" height="0" xmlns="http://www.w3.org/2000/svg"
+        version="1.1">
+        <defs>
+            <filter id="goo">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="15" result="blur" />
+                <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 25 -12"
+                    result="goo" />
+                <feComposite in="SourceGraphic" in2="goo" operator="atop" />
+            </filter>
+        </defs>
+    </svg>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, useRef } = React;
+
+        // --- Logo Component ---
+        const Logo = ({ className = "w-10 h-10" }) => {
+            const gradientId = useMemo(() => "logoGradient_" + Math.random().toString(36).substr(2, 9), []);
+            const glowId = useMemo(() => "glow_" + Math.random().toString(36).substr(2, 9), []);
+
+            return (
+                <div className={`relative flex items-center justify-center ${className} filter drop-shadow-sm`}>
+                    <svg viewBox="0 0 100 100" className="w-full h-full transform active:scale-95 transition-transform">
+                        <defs>
+                            <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style={{ stopColor: '#00C2FF', stopOpacity: 1 }} />
+                                <stop offset="100%" style={{ stopColor: '#4FD1FF', stopOpacity: 1 }} />
+                            </linearGradient>
+                            <filter id={glowId} x="-20%" y="-20%" width="140%" height="140%">
+                                <feGaussianBlur stdDeviation="3" result="blur" />
+                                <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                            </filter>
+                        </defs>
+
+                        {/* Outer Geometric Frame */}
+                        <path
+                            d="M50 5 L90 25 L90 75 L50 95 L10 75 L10 25 Z"
+                            fill="none"
+                            stroke={`url(#${gradientId})`}
+                            strokeWidth="1.5"
+                            strokeOpacity="0.2"
+                        />
+
+                        {/* Main Hexagon - Bold */}
+                        <path
+                            d="M50 15 L80 32 L80 68 L50 85 L20 68 L20 32 Z"
+                            fill="white"
+                            fillOpacity="0.8"
+                            stroke={`url(#${gradientId})`}
+                            strokeWidth="3.5"
+                            strokeLinejoin="round"
+                        />
+
+                        {/* Neural Node Core */}
+                        <circle cx="50" cy="50" r="12" fill={`url(#${gradientId})`}>
+                            <animate attributeName="r" values="11;13;11" dur="3s" repeatCount="indefinite" />
+                            <animate attributeName="fill-opacity" values="0.8;1;0.8" dur="3s" repeatCount="indefinite" />
+                        </circle>
+                        <circle cx="50" cy="50" r="16" fill="none" stroke={`url(#${gradientId})`} strokeWidth="1" strokeDasharray="2 4">
+                            <animateTransform attributeName="transform" type="rotate" from="0 50 50" to="360 50 50" dur="20s" repeatCount="indefinite" />
+                        </circle>
+
+                        {/* Circuit Branches */}
+                        <path d="M50 38 L50 25" stroke={`url(#${gradientId})`} strokeWidth="2.5" strokeLinecap="round" />
+                        <circle cx="50" cy="22" r="3" fill={`url(#${gradientId})`} />
+
+                        <path d="M60 45 L72 38" stroke={`url(#${gradientId})`} strokeWidth="2.5" strokeLinecap="round" />
+                        <circle cx="76" cy="36" r="3" fill={`url(#${gradientId})`} />
+
+                        <path d="M60 55 L72 62" stroke={`url(#${gradientId})`} strokeWidth="2.5" strokeLinecap="round" />
+                        <circle cx="76" cy="64" r="3" fill={`url(#${gradientId})`} />
+
+                        <path d="M40 45 L28 38" stroke={`url(#${gradientId})`} strokeWidth="2.5" strokeLinecap="round" />
+                        <circle cx="24" cy="36" r="3" fill={`url(#${gradientId})`} />
+
+                        <path d="M40 55 L28 62" stroke={`url(#${gradientId})`} strokeWidth="2.5" strokeLinecap="round" />
+                        <circle cx="24" cy="64" r="3" fill={`url(#${gradientId})`} />
+
+                        {/* Inventory Concept - Bottom Node */}
+                        <path d="M50 62 L50 75" stroke={`url(#${gradientId})`} strokeWidth="2.5" strokeLinecap="round" />
+                        <rect x="44" y="75" width="12" height="8" rx="2" fill={`url(#${gradientId})`} />
+                    </svg>
+                </div>
+            );
+        };
+
+        // --- Icons ---
+        const Icon = ({ name, className = "w-5 h-5" }) => {
+            useEffect(() => {
+                lucide.createIcons();
+            }, [name]);
+            return <i data-lucide={name} className={className}></i>;
+        };
+
+        const AIAssistant = ({ products = [], sales = [] }) => {
+            const [isOpen, setIsOpen] = useState(false);
+            const [query, setQuery] = useState('');
+            const [messages, setMessages] = useState([
+                { role: 'ai', text: "Hello! I am your StoreMind AI Assistant. I can help clarify your doubts about inventory management, sales logging, or predictions. How can I assist you today?" }
+            ]);
+            const [isTyping, setIsTyping] = useState(false);
+
+            const handleAsk = (e) => {
+                e.preventDefault();
+                if (!query.trim()) return;
+
+                const userQuery = query.trim();
+                const newMessages = [...messages, { role: 'user', text: userQuery }];
+                setMessages(newMessages);
+                setQuery('');
+                setIsTyping(true);
+
+                // Simulate AI "thinking"
+                setTimeout(() => {
+                    const q = userQuery.toLowerCase();
+                    let response = "";
+
+                    // Contextual Data
+                    const lowStockItems = products.filter(p => p.currentStock <= p.safetyStock);
+                    const totalProducts = products.length;
+                    const totalSalesUnits = sales.reduce((sum, s) => sum + s.quantity, 0);
+
+                    // Knowledge Base Heuristics
+                    if (q.includes('safety stock')) {
+                        response = "Safety Stock is a buffer of inventory kept to avoid stockouts. You can set this for each product. Currently, you have " + lowStockItems.length + " items that have hit or dropped below their safety stock levels.";
+                    } else if (q.includes('log') || q.includes('sales')) {
+                        response = "Logging sales is crucial! You've logged " + totalSalesUnits + " units in total. Consistent daily logging allows my predictive engine to reach up to 95% accuracy.";
+                    } else if (q.includes('prediction') || q.includes('forecast')) {
+                        response = "I use Linear Regression to project your future sales. Navigate to the 'Predictions' tab, select a product, and I'll tell you how much to reorder based on " + sales.length + " logged data points.";
+                    } else if (q.includes('status') || q.includes('inventory')) {
+                        response = "Your shop currently has " + totalProducts + " products tracked. " + (lowStockItems.length > 0 ? "Alert: " + lowStockItems.length + " items are low on stock and need attention." : "All stock levels looks healthy!");
+                    } else if (q.includes('help') || q.includes('how to')) {
+                        response = "I can help you with: 1. Managing products, 2. Logging sales, 3. Interpreting predictions, and 4. Analyzing reports. What would you like to know more about?";
+                    } else if (q.includes('who built') || q.includes('who are you')) {
+                        response = "I am the StoreMind AI, built to give small shop owners the superpowers of advanced data science. I was 'MADE IN INDIA' with precision.";
+                    } else {
+                        response = "I'm still learning about that! You can ask me things like 'What is my inventory status?' or 'How do predictions work?'.";
+                    }
+
+                    setMessages(prev => [...prev, { role: 'ai', text: response }]);
+                    setIsTyping(false);
+                }, 1000);
+            };
+
+            const handleClearChat = () => {
+                setMessages([
+                    { role: 'ai', text: "Chat history cleared. How else can I help you today?" }
+                ]);
+            };
+
+            return (
+                <div className="fixed bottom-8 right-8 z-[200]">
+                    {!isOpen ? (
+                        <button
+                            onClick={() => setIsOpen(true)}
+                            className="w-16 h-16 bg-slate-900 border border-slate-700 text-white rounded-full flex items-center justify-center shadow-2xl hover:scale-110 active:scale-95 transition-all group overflow-hidden"
+                        >
+                            <div className="absolute inset-0 liquid-flow opacity-50">
+                                <div className="liquid-blob w-12 h-12 bg-white" style={{ top: '10%', left: '10%' }}></div>
+                                <div className="liquid-blob w-10 h-10 bg-white" style={{ bottom: '10%', right: '10%', animationDelay: '-3s' }}></div>
+                            </div>
+                            <Logo className="relative w-8 h-8" />
+                        </button>
+                    ) : (
+                        <div className="w-[380px] h-[550px] ai-matte-glass rounded-[40px] shadow-3xl overflow-hidden flex flex-col animate-in slide-in-from-bottom-10 fade-in duration-500 border border-white/10">
+                            {/* Liquid BG */}
+                            <div className="absolute inset-0 z-0 liquid-flow opacity-30 pointer-events-none">
+                                <div className="liquid-blob w-40 h-40 bg-slate-900" style={{ top: '-10%', left: '10%' }}></div>
+                                <div className="liquid-blob w-32 h-32 bg-slate-900" style={{ bottom: '20%', right: '-10%', animationDelay: '-5s' }}></div>
+                                <div className="liquid-blob w-24 h-24 bg-slate-900" style={{ top: '40%', left: '50%', animationDelay: '-2s' }}></div>
+                            </div>
+
+                            <div className="relative z-10 flex flex-col h-full">
+                                <div className="p-8 flex items-center justify-between border-b border-white/5 bg-white/5 backdrop-blur-sm">
+                                    <div className="flex items-center space-x-3">
+                                        <div className="w-10 h-10 bg-white/10 rounded-2xl flex items-center justify-center text-white">
+                                            <Icon name="sparkles" />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-white font-bold text-lg">AI Assistant</h3>
+                                            <div className="flex items-center space-x-2">
+                                                <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
+                                                <span className="text-[10px] text-white/40 font-bold uppercase tracking-wider">Neural Live</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                        <button
+                                            onClick={handleClearChat}
+                                            title="Clear History"
+                                            className="p-2 text-white/40 hover:text-red-400 transition-colors"
+                                        >
+                                            <Icon name="trash-2" className="w-5 h-5" />
+                                        </button>
+                                        <button onClick={() => setIsOpen(false)} className="p-2 text-white/40 hover:text-white transition-colors">
+                                            <Icon name="x" className="w-5 h-5" />
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="flex-1 p-6 overflow-y-auto space-y-4">
+                                    {messages.map((m, i) => (
+                                        <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                            <div className={`max-w-[80%] p-4 rounded-2xl text-sm leading-relaxed ${m.role === 'user'
+                                                ? 'bg-white/20 text-white rounded-tr-none'
+                                                : 'bg-white/5 text-white/80 border border-white/5 rounded-tl-none'
+                                                }`}>
+                                                {m.text}
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {isTyping && (
+                                        <div className="flex justify-start">
+                                            <div className="bg-white/5 p-4 rounded-2xl rounded-tl-none border border-white/5 flex space-x-1">
+                                                <div className="w-1 h-1 bg-white/40 rounded-full animate-bounce"></div>
+                                                <div className="w-1 h-1 bg-white/40 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                                                <div className="w-1 h-1 bg-white/40 rounded-full animate-bounce [animation-delay:-0.5s]"></div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="p-8 bg-white/5 backdrop-blur-xl border-t border-white/5">
+                                    <form onSubmit={handleAsk} className="relative">
+                                        <input
+                                            type="text"
+                                            value={query}
+                                            onChange={(e) => setQuery(e.target.value)}
+                                            placeholder="Clarify your doubts..."
+                                            className="w-full bg-white/10 border border-white/10 text-white rounded-2xl px-6 py-4 focus:outline-none focus:ring-2 focus:ring-white/20 placeholder:text-white/20 text-sm"
+                                        />
+                                        <button className="absolute right-3 top-3 p-2 bg-white text-slate-900 rounded-xl hover:scale-105 active:scale-95 transition-all">
+                                            <Icon name="send" className="w-4 h-4" />
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // --- Components ---
+
+        const SidebarItem = ({ icon, label, id, active, onClick }) => (
+            <button
+                onClick={() => onClick(id)}
+                className={`w-full flex items-center space-x-4 px-6 py-4 rounded-2xl transition-all group relative overflow-hidden ${active
+                    ? 'bg-navy-800 text-primary border-l-4 border-primary shadow-premium'
+                    : 'text-slate-200 hover:bg-navy-800/50 hover:text-white'
+                    }`}
+            >
+                <Icon name={icon} className={`${active ? 'text-primary' : 'text-slate-300 group-hover:text-white'} transition-colors`} />
+                <span className="font-semibold tracking-wide text-sm">{label}</span>
+                {active && (
+                    <div className="absolute inset-0 bg-primary/5 opacity-10"></div>
+                )}
+            </button>
+        );
+
+        const StatCard = ({ label, value, icon, trend, color = "primary" }) => (
+            <div className="bg-navy-800 p-8 rounded-[24px] shadow-premium border border-white/5 flex items-center space-x-6 hover:shadow-premium-hover transition-all group">
+                <div className={`p-4 rounded-2xl bg-primary/10 text-primary group-hover:scale-110 transition-transform`}>
+                    <Icon name={icon} className="w-6 h-6" />
+                </div>
+                <div>
+                    <p className="text-slate-300 text-xs font-bold uppercase tracking-[0.15em] mb-1">{label}</p>
+                    <p className="text-3xl font-black text-white tracking-tight">{value}</p>
+                    {trend && (
+                        <div className={`flex items-center space-x-1 mt-2 text-xs font-bold ${trend > 0 ? 'text-success' : 'text-danger'}`}>
+                            <Icon name={trend > 0 ? 'trending-up' : 'trending-down'} className="w-3 h-3" />
+                            <span>{Math.abs(trend)}% vs last month</span>
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+
+        // --- Main Views ---
+
+        const Dashboard = ({ products = [], sales = [] }) => {
+            const [timeRange, setTimeRange] = useState('30d');
+            const chartRef = useRef(null);
+            const chartInstance = useRef(null);
+
+            const filterOptions = [
+                { id: '1h', label: 'Last 1 Hour' },
+                { id: '1d', label: 'Last 24 Hours' },
+                { id: '1w', label: 'Last 7 Days' },
+                { id: '30d', label: 'Last 30 Days' },
+                { id: '6m', label: 'Last 6 Months' },
+                { id: '1y', label: 'Last Year' },
+                { id: '10y', label: 'Last 10 Years' }
+            ];
+
+            // KPI Calculations
+            const lowStockCount = products.filter(p => p.currentStock <= p.safetyStock).length;
+
+            const totalMonthlyForecast = products.reduce((sum, p) => sum + (p.predictedMonthlyDemand || 0), 0);
+
+            const avgDailySales = useMemo(() => {
+                if (sales.length === 0) return 0;
+                const totalUnits = sales.reduce((sum, s) => sum + s.quantity, 0);
+
+                // Calculate days range
+                const dates = sales.map(s => new Date(s.date).getTime());
+                const minDate = Math.min(...dates);
+                const maxDate = Math.max(...dates);
+                const diffDays = Math.max(1, Math.ceil((maxDate - minDate) / (1000 * 60 * 60 * 24)));
+
+                return (totalUnits / diffDays).toFixed(1);
+            }, [sales]);
+
+            useEffect(() => {
+                if (!chartRef.current) return;
+
+                const getFilterDate = () => {
+                    const now = new Date();
+                    const d = new Date();
+                    switch (timeRange) {
+                        case '1h': d.setHours(now.getHours() - 1); break;
+                        case '1d': d.setDate(now.getDate() - 1); break;
+                        case '1w': d.setDate(now.getDate() - 7); break;
+                        case '30d': d.setDate(now.getDate() - 30); break;
+                        case '6m': d.setMonth(now.getMonth() - 6); break;
+                        case '1y': d.setFullYear(now.getFullYear() - 1); break;
+                        case '10y': d.setFullYear(now.getFullYear() - 10); break;
+                        default: d.setDate(now.getDate() - 30);
+                    }
+                    return d;
+                };
+
+                const filterDate = getFilterDate();
+                const filteredSales = sales.filter(s => new Date(s.date) >= filterDate);
+
+                const grouped = filteredSales.reduce((acc, s) => {
+                    const label = s.date;
+                    acc[label] = (acc[label] || 0) + s.quantity;
+                    return acc;
+                }, {});
+
+                const sortedLabels = Object.keys(grouped).sort();
+                const dataPoints = sortedLabels.map(l => grouped[l]);
+
+                if (chartInstance.current) chartInstance.current.destroy();
+
+                const ctx = chartRef.current.getContext('2d');
+                chartInstance.current = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: sortedLabels,
+                        datasets: [{
+                            label: 'Quantity Sold',
+                            data: dataPoints,
+                            borderColor: '#00C2FF',
+                            backgroundColor: 'rgba(0, 194, 255, 0.1)',
+                            fill: true,
+                            tension: 0.4,
+                            pointRadius: 6,
+                            pointBackgroundColor: '#00C2FF',
+                            pointBorderColor: '#0B1C2D',
+                            pointBorderWidth: 2,
+                            borderWidth: 3
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                backgroundColor: '#121F36',
+                                titleColor: '#fff',
+                                bodyColor: '#cbd5e1',
+                                borderColor: 'rgba(255,255,255,0.1)',
+                                borderWeight: 1,
+                                padding: 12
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                grid: { color: 'rgba(255,255,255,0.05)' },
+                                ticks: { stepSize: 1, color: '#94a3b8', font: { weight: 'bold' } }
+                            },
+                            x: {
+                                grid: { display: false },
+                                ticks: { color: '#94a3b8', font: { weight: 'bold' } }
+                            }
+                        }
+                    }
+                });
+
+                return () => { if (chartInstance.current) chartInstance.current.destroy(); };
+            }, [sales, timeRange]);
+
+            return (
+                <div className="space-y-8 animate-in fade-in duration-500">
+                    <div className="flex justify-between items-center">
+                        <h1 className="text-3xl font-black text-white tracking-tight">Business Metrics</h1>
+                        <div className="relative group">
+                            <select
+                                value={timeRange}
+                                onChange={(e) => setTimeRange(e.target.value)}
+                                className="appearance-none bg-navy-800 text-white px-6 py-3 pr-12 rounded-2xl border border-white/10 text-sm font-bold shadow-premium hover:bg-navy-700 transition-all focus:ring-2 focus:ring-primary outline-none cursor-pointer"
+                            >
+                                {filterOptions.map(opt => (
+                                    <option key={opt.id} value={opt.id}>{opt.label}</option>
+                                ))}
+                            </select>
+                            <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-primary">
+                                <Icon name="chevron-down" className="w-4 h-4" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                        <StatCard label="Live Inventory" value={products.length} icon="package" color="primary" trend={12} />
+                        <StatCard label="Critical Alerts" value={lowStockCount} icon="alert-triangle" color={lowStockCount > 0 ? "danger" : "primary"} />
+                        <StatCard label="Projected Sales" value={`${totalMonthlyForecast}`} icon="sparkles" color="primary" trend={8} />
+                        <StatCard label="Daily Velocity" value={avgDailySales} icon="zap" color="primary" />
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+                        <div className="lg:col-span-2 bg-navy-800 p-10 rounded-[48px] shadow-premium border border-white/5">
+                            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-8">Asset Velocity Trend</h3>
+                            <div className="h-72 relative">
+                                {sales.length > 0 ? (
+                                    <canvas ref={chartRef}></canvas>
+                                ) : (
+                                    <div className="h-full flex items-center justify-center text-slate-500 italic font-medium">
+                                        Data stream empty. Log transactions to activate telemetry.
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        <div className="bg-navy-800 p-10 rounded-[48px] shadow-premium border border-white/5">
+                            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-8">Neural Demand Insights</h3>
+                            <div className="space-y-6">
+                                {products
+                                    .filter(p => p.predictedMonthlyDemand)
+                                    .sort((a, b) => b.predictedMonthlyDemand - a.predictedMonthlyDemand)
+                                    .slice(0, 3)
+                                    .map((p, i) => (
+                                        <div key={p.productId} className="flex justify-between items-center p-4 rounded-3xl bg-white/[0.02] hover:bg-white/[0.05] transition-all border border-white/5 group">
+                                            <div className="flex items-center space-x-4">
+                                                <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary font-black text-xs shadow-inner group-hover:scale-110 transition-transform">
+                                                    #{i + 1}
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-black text-white">{p.productName}</p>
+                                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Flow: {p.predictedMonthlyDemand} units</p>
+                                                </div>
+                                            </div>
+                                            <div className={`text-[9px] font-black uppercase tracking-tighter px-3 py-1.5 rounded-full border ${p.predictedMonthlyDemand > p.safetyStock * 2
+                                                ? 'bg-success/10 text-success border-success/20'
+                                                : 'bg-primary/10 text-primary border-primary/20'
+                                                }`}>
+                                                {p.predictedMonthlyDemand > p.safetyStock * 2 ? 'Peak' : 'Steady'}
+                                            </div>
+                                        </div>
+                                    ))}
+                                {products.filter(p => p.predictedMonthlyDemand).length === 0 && (
+                                    <div className="text-center py-12">
+                                        <div className="w-16 h-16 bg-white/[0.02] rounded-full flex items-center justify-center mx-auto mb-4 border border-white/5">
+                                            <Icon name="sparkles" className="w-6 h-6 text-primary opacity-20" />
+                                        </div>
+                                        <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest opacity-40">Awaiting Analysis</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- Feature Components ---
+
+        const Modal = ({ title, isOpen, onClose, children }) => {
+            if (!isOpen) return null;
+            return (
+                <div className="fixed inset-0 z-[500] flex items-center justify-center p-4 bg-navy-900/80 backdrop-blur-xl animate-in fade-in duration-300">
+                    <div className="bg-navy-800 rounded-[32px] shadow-premium w-full max-w-md overflow-hidden transform transition-all border border-white/10">
+                        <div className="px-8 py-6 border-b border-white/5 flex justify-between items-center bg-navy-900/50">
+                            <h3 className="font-black text-white tracking-tight text-xl">{title}</h3>
+                            <button onClick={onClose} className="text-slate-400 hover:text-primary transition-colors"><Icon name="x" className="w-6 h-6" /></button>
+                        </div>
+                        <div className="p-8">
+                            {children}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const ProductManager = ({ products, profile, onRefresh }) => {
+            const [isModalOpen, setIsModalOpen] = useState(false);
+            const [editingProduct, setEditingProduct] = useState(null);
+            const [form, setForm] = useState({ productName: '', category: '', currentStock: 0, safetyStock: 0, price: 0 });
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                try {
+                    if (!window.DB) {
+                        throw new Error("Database not initialized. Please refresh the page.");
+                    }
+
+                    if (editingProduct) {
+                        const updatedProduct = {
+                            ...editingProduct,
+                            ...form,
+                            updatedAt: new Date().toISOString()
+                        };
+                        await window.DB.put('products', updatedProduct);
+                        alert('Product updated successfully!');
+                    } else {
+                        const newProduct = {
+                            ...form,
+                            productId: Math.random().toString(36).substr(2, 9),
+                            userId: profile.userId,
+                            createdAt: new Date().toISOString()
+                        };
+                        await window.DB.put('products', newProduct);
+                        alert('Product created successfully!');
+                    }
+                    setIsModalOpen(false);
+                    setEditingProduct(null);
+                    setForm({ productName: '', category: '', currentStock: 0, safetyStock: 0, price: 0 });
+                    onRefresh();
+                } catch (error) {
+                    console.error("Error saving product:", error);
+                    alert(`Failed to save product: ${error.message}`);
+                }
+            };
+
+            const handleDelete = async (productId) => {
+                if (confirm('Are you sure you want to delete this product?')) {
+                    await window.DB.delete('products', productId);
+                    onRefresh();
+                }
+            };
+
+            const handleEdit = (product) => {
+                setEditingProduct(product);
+                setForm({
+                    productName: product.productName,
+                    category: product.category,
+                    currentStock: product.currentStock,
+                    safetyStock: product.safetyStock,
+                    price: product.price || 0
+                });
+                setIsModalOpen(true);
+            };
+
+            const openAddModal = () => {
+                setEditingProduct(null);
+                setForm({ productName: '', category: '', currentStock: 0, safetyStock: 0, price: 0 });
+                setIsModalOpen(true);
+            };
+
+            return (
+                <div className="space-y-8">
+                    <div className="flex justify-between items-center">
+                        <h1 className="text-3xl font-black text-white tracking-tight">Stock Inventory</h1>
+                        <button
+                            onClick={openAddModal}
+                            className="bg-primary text-navy-900 px-8 py-4 rounded-[20px] font-black shadow-premium hover:bg-primary-hover hover:scale-105 active:scale-95 transition-all flex items-center space-x-3"
+                        >
+                            <Icon name="plus" className="w-5 h-5" />
+                            <span>Add Product</span>
+                        </button>
+                    </div>
+
+                    <div className="bg-navy-800 rounded-[32px] shadow-premium border border-white/5 overflow-hidden">
+                        <table className="w-full text-left">
+                            <thead className="bg-navy-900/50 border-b border-white/5">
+                                <tr>
+                                    <th className="px-8 py-5 text-[10px] font-black text-slate-300 uppercase tracking-[0.2em]">Product Name</th>
+                                    <th className="px-8 py-5 text-[10px] font-black text-slate-300 uppercase tracking-[0.2em]">Category</th>
+                                    <th className="px-8 py-5 text-[10px] font-black text-slate-300 uppercase tracking-[0.2em]">Price</th>
+                                    <th className="px-8 py-5 text-[10px] font-black text-slate-300 uppercase tracking-[0.2em]">Stock</th>
+                                    <th className="px-8 py-5 text-[10px] font-black text-slate-300 uppercase tracking-[0.2em]">Status</th>
+                                    <th className="px-8 py-5 text-[10px] font-black text-slate-300 uppercase tracking-[0.2em] text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-white/5">
+                                {products.length === 0 ? (
+                                    <tr><td colSpan="6" className="px-8 py-16 text-center text-slate-400 italic font-medium">No inventory records found.</td></tr>
+                                ) : (
+                                    products.map(p => (
+                                        <tr key={p.productId} className="hover:bg-white/[0.02] transition-colors group">
+                                            <td className="px-8 py-6 font-bold text-white">{p.productName}</td>
+                                            <td className="px-8 py-6 text-slate-300 text-sm font-medium">{p.category}</td>
+                                            <td className="px-8 py-6 font-black text-primary">${(p.price || 0).toFixed(2)}</td>
+                                            <td className="px-8 py-6">
+                                                <div className="flex flex-col">
+                                                    <span className="font-black text-lg text-white">{p.currentStock}</span>
+                                                    <span className="text-[10px] text-slate-400 uppercase font-bold tracking-widest opacity-60">Safety: {p.safetyStock}</span>
+                                                </div>
+                                            </td>
+                                            <td className="px-8 py-6">
+                                                <span className={`px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border ${p.currentStock <= p.safetyStock
+                                                    ? 'bg-danger/10 text-danger border-danger/20'
+                                                    : 'bg-success/10 text-success border-success/20'
+                                                    }`}>
+                                                    {p.currentStock <= p.safetyStock ? 'Low Stock' : 'Optimal'}
+                                                </span>
+                                            </td>
+                                            <td className="px-8 py-6 text-right">
+                                                <div className="flex items-center justify-end space-x-2">
+                                                    <button onClick={() => handleEdit(p)} className="p-3 text-slate-300 hover:text-primary hover:bg-white/5 rounded-2xl transition-all">
+                                                        <Icon name="pencil" className="w-4 h-4" />
+                                                    </button>
+                                                    <button onClick={() => handleDelete(p.productId)} className="p-3 text-slate-300 hover:text-danger hover:bg-danger/5 rounded-2xl transition-all">
+                                                        <Icon name="trash" className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <Modal title={editingProduct ? "Revise Product" : "New Inventory Item"} isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setEditingProduct(null); }}>
+                        <form onSubmit={handleSubmit} className="space-y-6">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest pl-1">Name</label>
+                                <input required type="text" className="w-full bg-navy-900 border border-white/10 rounded-[20px] px-6 py-4 focus:ring-2 focus:ring-primary outline-none transition-all text-white font-bold"
+                                    value={form.productName} onChange={e => setForm({ ...form, productName: e.target.value })} />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest pl-1">Category</label>
+                                <select className="w-full bg-navy-900 border border-white/10 rounded-[20px] px-6 py-4 focus:ring-2 focus:ring-primary outline-none transition-all text-white font-bold"
+                                    value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}>
+                                    <option value="">Choose category...</option>
+                                    <option value="Grocery">Grocery</option>
+                                    <option value="Stationery">Stationery</option>
+                                    <option value="Bakery">Bakery</option>
+                                    <option value="Medical">Medical</option>
+                                </select>
+                            </div>
+                            <div className="grid grid-cols-3 gap-6">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest pl-1">Price</label>
+                                    <input required type="number" step="0.01" className="w-full bg-navy-900 border border-white/10 rounded-[20px] px-6 py-4 focus:ring-2 focus:ring-primary outline-none transition-all text-white font-bold"
+                                        value={form.price} onChange={e => setForm({ ...form, price: parseFloat(e.target.value) || 0 })} />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest pl-1">Stock</label>
+                                    <input required type="number" className="w-full bg-navy-900 border border-white/10 rounded-[20px] px-6 py-4 focus:ring-2 focus:ring-primary outline-none transition-all text-white font-bold"
+                                        value={form.currentStock} onChange={e => setForm({ ...form, currentStock: parseInt(e.target.value) })} />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest pl-1">Safety</label>
+                                    <input required type="number" className="w-full bg-navy-900 border border-white/10 rounded-[20px] px-6 py-4 focus:ring-2 focus:ring-primary outline-none transition-all text-white font-bold"
+                                        value={form.safetyStock} onChange={e => setForm({ ...form, safetyStock: parseInt(e.target.value) })} />
+                                </div>
+                            </div>
+                            <button type="submit" className="w-full bg-primary text-navy-900 py-6 rounded-[24px] font-black text-lg shadow-premium mt-4 hover:bg-primary-hover hover:scale-[1.02] active:scale-95 transition-all">
+                                {editingProduct ? "Confirm Revision" : "Integrate Item"}
+                            </button>
+                        </form>
+                    </Modal>
+                </div>
+            );
+        };
+
+        const SalesEntry = ({ products = [], sales = [], profile, onRefresh }) => {
+            const [selectedProduct, setSelectedProduct] = useState('');
+            const [quantity, setQuantity] = useState(0);
+            const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+            const [subTab, setSubTab] = useState('new');
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                const qty = parseInt(quantity);
+                const prod = products.find(p => p.productId === selectedProduct);
+
+                if (!prod) {
+                    alert('Please select a product.');
+                    return;
+                }
+
+                if (prod.currentStock < qty) {
+                    alert(`Cannot log sale. Insufficient stock for ${prod.productName}. Available: ${prod.currentStock}`);
+                    return;
+                }
+
+                const sale = {
+                    productId: selectedProduct,
+                    userId: profile.userId,
+                    quantity: qty,
+                    date: date,
+                    createdAt: new Date().toISOString()
+                };
+                await window.DB.put('sales', sale);
+
+                // Update product stock safely
+                prod.currentStock -= qty;
+                await window.DB.put('products', prod);
+
+                alert('Sale logged successfully!');
+                setQuantity(0);
+                onRefresh();
+            };
+
+            return (
+                <div className="max-w-4xl mx-auto space-y-10">
+                    <div className="flex items-center justify-between">
+                        <h1 className="text-3xl font-black text-white tracking-tight">Sales Records</h1>
+                        <div className="flex bg-navy-800 p-1.5 rounded-[20px] border border-white/5 shadow-inner">
+                            <button
+                                onClick={() => setSubTab('new')}
+                                className={`px-6 py-2.5 rounded-[14px] text-xs font-black tracking-widest uppercase transition-all ${subTab === 'new' ? 'bg-primary text-navy-900 shadow-premium' : 'text-slate-400 hover:text-white'}`}
+                            >
+                                New Entry
+                            </button>
+                            <button
+                                onClick={() => setSubTab('history')}
+                                className={`px-6 py-2.5 rounded-[14px] text-xs font-black tracking-widest uppercase transition-all ${subTab === 'history' ? 'bg-primary text-navy-900 shadow-premium' : 'text-slate-400 hover:text-white'}`}
+                            >
+                                History
+                            </button>
+                        </div>
+                    </div>
+
+                    {subTab === 'new' ? (
+                        <div className="bg-navy-800/50 backdrop-blur-xl p-12 rounded-[40px] shadow-premium border border-white/5 max-w-2xl mx-auto w-full">
+                            <form onSubmit={handleSubmit} className="space-y-8">
+                                <div className="space-y-3">
+                                    <label className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em] pl-1">Target Product</label>
+                                    <select required className="w-full bg-navy-900 border border-white/10 rounded-[20px] px-6 py-5 focus:ring-2 focus:ring-primary outline-none transition-all text-white font-bold appearance-none custom-scrollbar"
+                                        value={selectedProduct} onChange={e => setSelectedProduct(e.target.value)}>
+                                        <option value="">Select identity...</option>
+                                        {products.map(p => <option key={p.productId} value={p.productId} className="bg-navy-900">{p.productName} (Avail: {p.currentStock})</option>)}
+                                    </select>
+                                </div>
+                                <div className="grid grid-cols-2 gap-8">
+                                    <div className="space-y-3">
+                                        <label className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em] pl-1">Volume</label>
+                                        <input required type="number" min="1" max={selectedProduct ? products.find(p => p.productId === selectedProduct)?.currentStock : undefined}
+                                            className="w-full bg-navy-900 border border-white/10 rounded-[20px] px-6 py-5 focus:ring-2 focus:ring-primary outline-none transition-all text-white font-black text-xl"
+                                            value={quantity} onChange={e => setQuantity(e.target.value)} />
+                                    </div>
+                                    <div className="space-y-3">
+                                        <label className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em] pl-1">Timestamp</label>
+                                        <input required type="date" className="w-full bg-navy-900 border border-white/10 rounded-[20px] px-6 py-5 focus:ring-2 focus:ring-primary outline-none transition-all text-white font-bold"
+                                            value={date} onChange={e => setDate(e.target.value)} />
+                                    </div>
+                                </div>
+                                <button type="submit" className="w-full bg-primary text-navy-900 py-6 rounded-[28px] font-black text-xl shadow-premium hover:bg-primary-hover hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center space-x-4">
+                                    <Icon name="check-circle" className="w-6 h-6" />
+                                    <span>Commit Entry</span>
+                                </button>
+                            </form>
+                        </div>
+                    ) : (
+                        <SalesHistory sales={sales} products={products} />
+                    )}
+                </div>
+            );
+        };
+
+        const PredictionView = ({ products }) => {
+            const [selectedProduct, setSelectedProduct] = useState('');
+            const [prediction, setPrediction] = useState(null);
+            const [loading, setLoading] = useState(false);
+
+            const handlePredict = async () => {
+                if (!selectedProduct) return;
+                setLoading(true);
+                try {
+                    const sales = await window.DB.getFromIndex('sales', 'productId', selectedProduct);
+                    const prod = products.find(p => p.productId === selectedProduct);
+
+                    const response = await fetch('http://127.0.0.1:8080/predict', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            productId: selectedProduct,
+                            currentStock: prod.currentStock,
+                            safetyStock: prod.safetyStock,
+                            salesHistory: sales.map(s => ({ date: s.date, quantity: s.quantity }))
+                        })
+                    });
+
+                    if (!response.ok) throw new Error('Backend error');
+                    const data = await response.json();
+                    setPrediction(data);
+
+                    // Persist prediction to product record
+                    if (window.DB) {
+                        const updatedProduct = {
+                            ...prod,
+                            predictedMonthlyDemand: data.predictedMonthlyDemand,
+                            lastTrend: data.trend,
+                            predictionRisk: data.riskLevel,
+                            lastPredictedAt: new Date().toISOString()
+                        };
+                        await window.DB.put('products', updatedProduct);
+                    }
+                } catch (err) {
+                    console.error(err);
+                    alert("Failed to get prediction. Ensure backend is running.");
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            return (
+                <div className="space-y-10 max-w-4xl mx-auto">
+                    <div className="flex justify-between items-center">
+                        <h1 className="text-3xl font-black text-white tracking-tight">Demand Intelligence</h1>
+                        <div className="flex space-x-4">
+                            <select
+                                className="px-6 py-3 bg-navy-800 border border-white/10 rounded-[20px] focus:ring-2 focus:ring-primary outline-none text-white font-bold custom-scrollbar"
+                                value={selectedProduct} onChange={e => { setSelectedProduct(e.target.value); setPrediction(null); }}
+                            >
+                                <option value="" className="bg-navy-900">Select asset...</option>
+                                {products.map(p => <option key={p.productId} value={p.productId} className="bg-navy-900">{p.productName}</option>)}
+                            </select>
+                            <button
+                                onClick={handlePredict}
+                                disabled={!selectedProduct || loading}
+                                className="bg-primary text-navy-900 px-8 py-3 rounded-[20px] font-black hover:bg-primary-hover disabled:opacity-30 disabled:hover:scale-100 flex items-center space-x-3 transition-all transform hover:scale-105 active:scale-95 shadow-premium"
+                            >
+                                {loading ? <Icon name="loader-2" className="animate-spin w-5 h-5" /> : <Icon name="sparkles" className="w-5 h-5" />}
+                                <span>{loading ? 'Synthesizing...' : 'Run Analysis'}</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    {prediction ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-10 animate-in slide-in-from-bottom-8 duration-700">
+                            <div className="bg-navy-800/50 backdrop-blur-xl p-10 rounded-[48px] shadow-premium border border-white/5 flex flex-col items-center text-center space-y-6">
+                                <div className={`w-24 h-24 rounded-3xl flex items-center justify-center shadow-lg transform rotate-3 ${prediction.trend === 'increasing' ? 'bg-success/20 text-success border border-success/30' :
+                                    prediction.trend === 'decreasing' ? 'bg-danger/20 text-danger border border-danger/30' :
+                                        'bg-primary/20 text-primary border border-primary/30'
+                                    }`}>
+                                    <Icon name={prediction.trend === 'increasing' ? 'trending-up' : prediction.trend === 'decreasing' ? 'trending-down' : 'minus'} className="w-12 h-12" />
+                                </div>
+                                <div className="space-y-1">
+                                    <h2 className="text-6xl font-black text-white tracking-tighter">{prediction.predictedMonthlyDemand}</h2>
+                                    <p className="text-slate-400 font-bold uppercase tracking-[0.2em] text-[10px]">Predicted Monthly Flow</p>
+                                </div>
+                                <div className="w-full pt-8 border-t border-white/5 grid grid-cols-2 gap-8">
+                                    <div className="space-y-1">
+                                        <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest opacity-60">Daily Avg</p>
+                                        <p className="text-xl font-black text-white">{prediction.averageDailySales}</p>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest opacity-60">Dynamic Trend</p>
+                                        <p className="text-xl font-black text-white capitalize">{prediction.trend}</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="bg-primary p-12 rounded-[48px] shadow-premium text-navy-900 space-y-8 relative overflow-hidden group">
+                                <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 transform transition-transform group-hover:scale-150 duration-700"></div>
+                                <h3 className="text-2xl font-black flex items-center space-x-3 relative z-10">
+                                    <Icon name="zap" className="w-8 h-8" />
+                                    <span>AI RECOMMENDATION</span>
+                                </h3>
+                                <div className="space-y-2 relative z-10">
+                                    <p className="text-navy-900/60 text-[10px] uppercase tracking-[0.2em] font-black">Strategic Reorder Level</p>
+                                    <p className="text-7xl font-black tracking-tighter">{prediction.reorderQuantity} <span className="text-xl opacity-40 font-bold">units</span></p>
+                                </div>
+                                <div className="bg-navy-900/10 backdrop-blur-md p-6 rounded-3xl flex items-center space-x-5 relative z-10 border border-white/10">
+                                    <div className={`p-3 rounded-[20px] bg-navy-900 ${prediction.riskLevel === 'critical' ? 'text-danger' : 'text-primary'}`}>
+                                        <Icon name="shield-check" className="w-6 h-6" />
+                                    </div>
+                                    <div className="space-y-0.5">
+                                        <p className="text-[10px] font-black uppercase opacity-60 tracking-widest">Surge Risk Status</p>
+                                        <p className="font-black text-lg capitalize">{prediction.riskLevel.replace('_', ' ')}</p>
+                                    </div>
+                                </div>
+                                <p className="text-sm text-navy-900/70 font-bold italic leading-relaxed relative z-10">
+                                    "Our neural model suggests a tactical stock injection of {prediction.reorderQuantity} units to mitigate potential {prediction.riskLevel === 'critical' ? 'inventory exhaustion' : 'supply shortages'}."
+                                </p>
+                            </div>
+                        </div>
+                    ) : (
+                        !loading && <div className="bg-navy-800/30 backdrop-blur-sm p-24 rounded-[48px] border-2 border-dashed border-white/5 text-center group hover:border-white/10 transition-colors">
+                            <div className="bg-navy-800 w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform shadow-premium">
+                                <Icon name="cpu" className="w-10 h-10 text-primary opacity-30 group-hover:opacity-100 transition-opacity" />
+                            </div>
+                            <p className="text-slate-400 font-black text-xs uppercase tracking-[0.3em] opacity-40">Awaiting Target Selection</p>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const ReportsView = ({ products = [], sales = [] }) => {
+            const stockChartRef = useRef(null);
+            const stockChartInstance = useRef(null);
+            const salesChartRef = useRef(null);
+            const salesChartInstance = useRef(null);
+
+            useEffect(() => {
+                if (!stockChartRef.current || products.length === 0) return;
+
+                const distribution = products.reduce((acc, p) => {
+                    const value = (p.currentStock || 0) * (p.price || 0);
+                    acc[p.category] = (acc[p.category] || 0) + value;
+                    return acc;
+                }, {});
+
+                const labels = Object.keys(distribution);
+                const data = Object.values(distribution);
+
+                if (stockChartInstance.current) stockChartInstance.current.destroy();
+
+                const ctx = stockChartRef.current.getContext('2d');
+                stockChartInstance.current = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            data: data,
+                            backgroundColor: [
+                                '#00C2FF', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#64748b'
+                            ],
+                            borderWidth: 0,
+                            hoverOffset: 15
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: {
+                                    usePointStyle: true,
+                                    padding: 24,
+                                    color: '#cbd5e1',
+                                    font: { family: 'Inter', weight: 'bold', size: 10 }
+                                }
+                            },
+                            tooltip: {
+                                backgroundColor: '#121F36',
+                                titleColor: '#fff',
+                                bodyColor: '#cbd5e1',
+                                borderColor: 'rgba(255,255,255,0.1)',
+                                borderWeight: 1,
+                                padding: 12,
+                                callbacks: {
+                                    label: (ctx) => ` $${ctx.raw.toLocaleString()}`
+                                }
+                            }
+                        },
+                        cutout: '80%'
+                    }
+                });
+
+                return () => { if (stockChartInstance.current) stockChartInstance.current.destroy(); };
+            }, [products]);
+
+            useEffect(() => {
+                if (!salesChartRef.current || sales.length === 0) return;
+
+                const grouped = sales.reduce((acc, s) => {
+                    const label = s.date;
+                    acc[label] = (acc[label] || 0) + s.quantity;
+                    return acc;
+                }, {});
+
+                const sortedLabels = Object.keys(grouped).sort();
+                const dataPoints = sortedLabels.map(l => grouped[l]);
+
+                if (salesChartInstance.current) salesChartInstance.current.destroy();
+
+                const ctx = salesChartRef.current.getContext('2d');
+                salesChartInstance.current = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: sortedLabels,
+                        datasets: [{
+                            label: 'Quantity Sold',
+                            data: dataPoints,
+                            backgroundColor: '#00C2FF',
+                            borderRadius: 12,
+                            hoverBackgroundColor: '#0085FF'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                backgroundColor: '#121F36',
+                                titleColor: '#fff',
+                                bodyColor: '#cbd5e1',
+                                borderColor: 'rgba(255,255,255,0.1)',
+                                borderWeight: 1,
+                                padding: 12
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                grid: { color: 'rgba(255,255,255,0.05)' },
+                                ticks: { stepSize: 1, color: '#94a3b8', font: { weight: 'bold' } }
+                            },
+                            x: {
+                                grid: { display: false },
+                                ticks: { color: '#94a3b8', font: { weight: 'bold' } }
+                            }
+                        }
+                    }
+                });
+
+                return () => { if (salesChartInstance.current) salesChartInstance.current.destroy(); };
+            }, [sales]);
+
+            return (
+                <div className="max-w-4xl mx-auto space-y-12">
+                    <h1 className="text-3xl font-black text-white tracking-tight">Intelligence Reports</h1>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                        <div className="bg-navy-800/50 backdrop-blur-xl p-10 rounded-[48px] shadow-premium border border-white/5">
+                            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-8">Asset Valuation</h3>
+                            <div className="h-72 relative">
+                                {products.some(p => p.price > 0) ? (
+                                    <canvas ref={stockChartRef}></canvas>
+                                ) : (
+                                    <div className="h-full flex flex-col items-center justify-center text-slate-500 italic space-y-4">
+                                        <div className="w-16 h-16 bg-white/[0.02] rounded-full flex items-center justify-center border border-white/5">
+                                            <Icon name="pie-chart" className="w-6 h-6 opacity-20" />
+                                        </div>
+                                        <p className="text-[10px] font-black uppercase tracking-widest opacity-40">Add pricing to activate</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        <div className="bg-navy-800/50 backdrop-blur-xl p-10 rounded-[48px] shadow-premium border border-white/5">
+                            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-8">Transaction Stream</h3>
+                            <div className="h-72 relative">
+                                {sales.length > 0 ? (
+                                    <canvas ref={salesChartRef}></canvas>
+                                ) : (
+                                    <div className="h-full flex flex-col items-center justify-center text-slate-500 italic space-y-4">
+                                        <div className="w-16 h-16 bg-white/[0.02] rounded-full flex items-center justify-center border border-white/5">
+                                            <Icon name="bar-chart-3" className="w-6 h-6 opacity-20" />
+                                        </div>
+                                        <p className="text-[10px] font-black uppercase tracking-widest opacity-40">No telemetry recorded</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const SalesHistory = ({ sales = [], products = [] }) => {
+            const history = useMemo(() => {
+                return [...sales].sort((a, b) => new Date(b.date) - new Date(a.date)).map(s => {
+                    const product = products.find(p => p.productId === s.productId);
+                    return {
+                        ...s,
+                        productName: product ? product.productName : 'Deleted Product',
+                        category: product ? product.category : 'N/A'
+                    };
+                });
+            }, [sales, products]);
+
+            return (
+                <div className="space-y-10 animate-in fade-in duration-700">
+                    <h1 className="text-3xl font-black text-white tracking-tight">Telemetry Logs</h1>
+                    <div className="bg-navy-800/50 backdrop-blur-xl rounded-[40px] shadow-premium border border-white/5 overflow-hidden transition-all">
+                        <div className="overflow-x-auto custom-scrollbar">
+                            <table className="w-full text-left border-collapse">
+                                <thead className="bg-navy-900/50 border-b border-white/5">
+                                    <tr>
+                                        <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Timestamp</th>
+                                        <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Asset Identity</th>
+                                        <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Category</th>
+                                        <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Volume</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-white/5">
+                                    {history.length === 0 ? (
+                                        <tr><td colSpan="4" className="px-8 py-24 text-center">
+                                            <div className="flex flex-col items-center space-y-4">
+                                                <div className="w-16 h-16 bg-white/[0.02] rounded-full flex items-center justify-center border border-white/5">
+                                                    <Icon name="database" className="w-6 h-6 opacity-20" />
+                                                </div>
+                                                <p className="text-[10px] font-black uppercase tracking-widest opacity-40">Archive Empty</p>
+                                            </div>
+                                        </td></tr>
+                                    ) : (
+                                        history.map((s, idx) => (
+                                            <tr key={idx} className="hover:bg-white/[0.02] transition-colors group">
+                                                <td className="px-8 py-6">
+                                                    <p className="text-sm font-black text-white">{new Date(s.date).toLocaleDateString()}</p>
+                                                </td>
+                                                <td className="px-8 py-6">
+                                                    <p className="text-sm font-bold text-white group-hover:text-primary transition-colors">{s.productName}</p>
+                                                </td>
+                                                <td className="px-8 py-6">
+                                                    <span className="px-3 py-1 bg-white/5 rounded-full text-[9px] font-black text-slate-400 uppercase tracking-widest border border-white/5">
+                                                        {s.category}
+                                                    </span>
+                                                </td>
+                                                <td className="px-8 py-6 font-black text-xl text-primary">
+                                                    {s.quantity}
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const SettingsView = ({ profile, onLogout, onSwitch }) => {
+            const [subTab, setSubTab] = useState('general');
+
+            return (
+                <div className="space-y-12 animate-in fade-in duration-700 max-w-4xl mx-auto pb-24">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                        <h1 className="text-3xl font-black text-white tracking-tight">System Configuration</h1>
+                        <div className="flex bg-navy-800 p-1.5 rounded-[20px] border border-white/5 shadow-inner">
+                            <button
+                                onClick={() => setSubTab('general')}
+                                className={`px-6 py-2.5 rounded-[14px] text-xs font-black tracking-widest uppercase transition-all ${subTab === 'general' ? 'bg-primary text-navy-900 shadow-premium' : 'text-slate-400 hover:text-white'}`}
+                            >
+                                Core
+                            </button>
+                            <button
+                                onClick={() => setSubTab('manual')}
+                                className={`px-6 py-2.5 rounded-[14px] text-xs font-black tracking-widest uppercase transition-all ${subTab === 'manual' ? 'bg-primary text-navy-900 shadow-premium' : 'text-slate-400 hover:text-white'}`}
+                            >
+                                Intelligence Docs
+                            </button>
+                            <button
+                                onClick={() => setSubTab('about')}
+                                className={`px-6 py-2.5 rounded-[14px] text-xs font-black tracking-widest uppercase transition-all ${subTab === 'about' ? 'bg-primary text-navy-900 shadow-premium' : 'text-slate-400 hover:text-white'}`}
+                            >
+                                Identity
+                            </button>
+                        </div>
+                    </div>
+
+                    {subTab === 'general' && (
+                        <div className="space-y-10 max-w-2xl">
+                            {/* Account Settings */}
+                            <div className="bg-navy-800/50 backdrop-blur-xl rounded-[40px] shadow-premium border border-white/5 overflow-hidden transition-all">
+                                <div className="p-10 border-b border-white/5">
+                                    <div className="flex items-center space-x-4 mb-8">
+                                        <div className="p-3 bg-primary/10 rounded-2xl text-primary shadow-inner">
+                                            <Icon name="user-cog" className="w-6 h-6" />
+                                        </div>
+                                        <h3 className="text-xl font-black text-white uppercase tracking-tight">Identity Management</h3>
+                                    </div>
+                                    <div className="space-y-4">
+                                        <button onClick={onSwitch} className="w-full flex items-center justify-between p-6 rounded-[32px] bg-white/[0.02] hover:bg-white/[0.05] transition-all group border border-white/5">
+                                            <div className="flex items-center space-x-5">
+                                                <div className="w-14 h-14 bg-accent/10 rounded-[20px] flex items-center justify-center text-accent shadow-inner group-hover:scale-110 transition-transform">
+                                                    <Icon name="users" className="w-6 h-6" />
+                                                </div>
+                                                <div className="text-left">
+                                                    <p className="text-sm font-black text-white">Switch Operator</p>
+                                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Active: {profile.name}</p>
+                                                </div>
+                                            </div>
+                                            <Icon name="chevron-right" className="w-5 h-5 text-slate-700 group-hover:translate-x-1 transition-transform" />
+                                        </button>
+                                        <button onClick={onLogout} className="w-full flex items-center justify-between p-6 rounded-[32px] bg-danger/5 hover:bg-danger/10 transition-all group border border-danger/10">
+                                            <div className="flex items-center space-x-5">
+                                                <div className="w-14 h-14 bg-danger text-navy-900 rounded-[20px] flex items-center justify-center shadow-premium group-hover:rotate-12 transition-transform">
+                                                    <Icon name="log-out" className="w-6 h-6" />
+                                                </div>
+                                                <div className="text-left">
+                                                    <p className="text-sm font-black text-danger">Terminal Shutdown</p>
+                                                    <p className="text-[10px] font-bold text-danger/50 uppercase tracking-widest">Secure session termination</p>
+                                                </div>
+                                            </div>
+                                            <Icon name="power" className="w-5 h-5 text-danger/20 group-hover:scale-125 transition-transform" />
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="bg-navy-800/30 backdrop-blur-sm rounded-[32px] p-8 border border-white/5 flex items-center justify-between">
+                                <p className="text-[10px] text-slate-500 font-black tracking-[0.3em] uppercase">
+                                    CORE SYSTEM • V2.5.0
+                                </p>
+                                <div className="flex items-center space-x-3">
+                                    <div className="w-2.5 h-2.5 rounded-full bg-success shadow-[0_0_12px_rgba(34,197,94,0.4)] animate-pulse"></div>
+                                    <p className="text-[10px] font-black text-success uppercase tracking-widest">Quantum Link Active</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {subTab === 'manual' && (
+                        <div className="space-y-10 animate-in slide-in-from-bottom-8 duration-700">
+                            {[
+                                {
+                                    title: "1. Asset Management",
+                                    icon: "package",
+                                    content: "Begin by initializing your inventory in the Products tab. Configure 'Safety Stocks' to establish emergency thresholds."
+                                },
+                                {
+                                    title: "2. Telemetry Capture",
+                                    icon: "plus-circle",
+                                    content: "Stream daily transaction data via 'Log Sales'. Consistent data flow is critical for neural accuracy."
+                                },
+                                {
+                                    title: "3. Neural Projection",
+                                    icon: "trending-up",
+                                    content: "Deploy 'Predictions' to analyze asset trajectories. Our backend synthesize trends to output optimized reorder quotas."
+                                },
+                                {
+                                    title: "4. Strategic Command",
+                                    icon: "layout-dashboard",
+                                    content: "The Dashboard provides a 360° operational view. Use 'Reports' for deep asset valuation and flow analytics."
+                                }
+                            ].map((s, idx) => (
+                                <div key={idx} className="bg-navy-800/50 backdrop-blur-xl p-10 rounded-[48px] shadow-premium border border-white/5 hover:border-white/10 transition-all group">
+                                    <div className="flex items-center space-x-8">
+                                        <div className="w-20 h-20 rounded-[24px] bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 group-hover:rotate-3 transition-transform shadow-inner">
+                                            <Icon name={s.icon} className="w-8 h-8" />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <h3 className="text-xl font-black text-white uppercase tracking-tight">{s.title}</h3>
+                                            <p className="text-slate-400 text-sm leading-relaxed max-w-xl font-medium">{s.content}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                            <div className="bg-primary rounded-[48px] p-12 text-navy-900 shadow-premium relative overflow-hidden group">
+                                <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32 transform transition-transform group-hover:scale-150 duration-1000"></div>
+                                <div className="flex items-center justify-between relative z-10">
+                                    <div className="space-y-4">
+                                        <div className="flex items-center space-x-4">
+                                            <Icon name="help-circle" className="w-10 h-10" />
+                                            <h3 className="text-3xl font-black tracking-tighter uppercase">Support uplink</h3>
+                                        </div>
+                                        <p className="text-navy-900/70 font-bold max-w-md leading-relaxed">Encountering anomalies? Contact our strategic response team or check the Quantum documentation for immediate resolution.</p>
+                                    </div>
+                                    <button className="bg-navy-900 text-primary px-10 py-5 rounded-[24px] font-black text-xs uppercase tracking-widest hover:bg-navy-800 transition-colors shadow-premium transform hover:scale-105 active:scale-95">Initiate Uplink</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {subTab === 'about' && (
+                        <div className="bg-navy-800/50 backdrop-blur-xl rounded-[48px] shadow-premium border border-white/5 p-12 space-y-12">
+                            <div className="flex items-center space-x-4">
+                                <Logo className="w-12 h-12" />
+                                <h3 className="text-2xl font-black text-white uppercase tracking-tight">The StoreMind AI Vision</h3>
+                            </div>
+
+                            <div className="space-y-10 text-slate-400 leading-relaxed text-sm font-medium">
+                                <p className="text-lg text-white font-black leading-relaxed max-w-2xl">
+                                    Democratizing strategic intelligence. StoreMind AI empowers retail operators with the neural tools previously reserved for enterprise powerhouses.
+                                </p>
+
+                                <div className="space-y-6">
+                                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Quantum System Capabilities</p>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                        {[
+                                            { title: "Vector Projection", icon: "brain-circuit", desc: "Predict future volume with 95% accuracy via historical analysis." },
+                                            { title: "Quantum Privacy", icon: "shield-check", desc: "Your telemetry never leaves the terminal. Local encryption active." },
+                                            { title: "Asset Analytics", icon: "bar-chart-4", desc: "Visualize high-performing value distributions automatically." },
+                                            { title: "Threshold Alerts", icon: "bell-ring", desc: "Neural monitoring for emergency safety-stock mitigation." }
+                                        ].map((f, i) => (
+                                            <div key={i} className="flex items-start space-x-5 p-6 rounded-3xl bg-white/[0.02] border border-white/5 hover:border-white/10 transition-all group">
+                                                <div className="p-3 bg-navy-900 rounded-2xl shadow-inner text-primary group-hover:scale-110 transition-transform">
+                                                    <Icon name={f.icon} className="w-5 h-5" />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <p className="font-black text-white text-sm uppercase tracking-tight">{f.title}</p>
+                                                    <p className="text-[11px] text-slate-500 leading-relaxed font-medium">{f.desc}</p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="pt-10 border-t border-white/5 flex items-center justify-between">
+                                    <p className="text-[10px] text-slate-500 font-black tracking-[0.3em] uppercase">
+                                        OPERATIONAL COMMAND • V 2.5.0
+                                    </p>
+                                    <div className="flex items-center space-x-3">
+                                        <div className="w-2.5 h-2.5 rounded-full bg-success shadow-[0_0_12px_rgba(34,197,94,0.4)] animate-pulse"></div>
+                                        <p className="text-[10px] font-black text-success uppercase tracking-widest">Neural Link Sync Complete</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+
+        const LoginView = ({ onLogin }) => {
+            const [mode, setMode] = useState('welcome'); // welcome, setup, login
+            const [form, setForm] = useState({ name: '', shopName: '', role: 'Owner' });
+            const [isLoading, setIsLoading] = useState(false);
+            const [existingUsers, setExistingUsers] = useState([]);
+
+            useEffect(() => {
+                const loadUsers = async () => {
+                    if (window.DB) {
+                        const users = await window.DB.getAll('users');
+                        setExistingUsers(users || []);
+                    }
+                };
+                loadUsers();
+            }, [mode]);
+
+            const handleLaunch = async (e) => {
+                e.preventDefault();
+                setIsLoading(true);
+
+                await new Promise(r => setTimeout(r, 1000));
+
+                const userId = 'user_' + Date.now();
+                const profile = {
+                    ...form,
+                    userId: userId,
+                    createdAt: new Date().toISOString()
+                };
+
+                if (window.DB) {
+                    await window.DB.put('users', profile);
+                    localStorage.setItem('invedictor_current_user_id', userId);
+                    onLogin(profile);
+                }
+                setIsLoading(false);
+            };
+
+            const handleSelectUser = (user) => {
+                localStorage.setItem('invedictor_current_user_id', user.userId);
+                onLogin(user);
+            };
+
+            return (
+                <div className="fixed inset-0 bg-navy-900 z-[300] flex items-center justify-center p-6 overflow-hidden">
+                    {/* Background Visuals */}
+                    <div className="absolute inset-0 liquid-flow opacity-10 pointer-events-none">
+                        <div className="liquid-blob w-[500px] h-[500px] bg-primary" style={{ top: '-10%', left: '-10%' }}></div>
+                        <div className="liquid-blob w-[400px] h-[400px] bg-primary/20" style={{ bottom: '-10%', right: '-10%', animationDelay: '-5s' }}></div>
+                    </div>
+
+                    <div className="max-w-xl w-full relative z-10">
+                        {mode === 'welcome' && (
+                            <div className="text-center space-y-12 animate-in fade-in zoom-in duration-700">
+                                <div className="inline-flex items-center justify-center p-8 bg-navy-800 rounded-[48px] shadow-premium rotate-6 hover:rotate-0 transition-all duration-500 group border border-white/5">
+                                    <Logo className="w-24 h-24 group-hover:scale-110 transition-transform" />
+                                </div>
+                                <div className="space-y-4">
+                                    <h1 className="text-6xl font-black text-white tracking-tight">StoreMind <span className="text-primary">AI</span></h1>
+                                    <p className="text-slate-300 text-lg max-w-sm mx-auto font-medium leading-relaxed">Precision inventory forecasting for the modern shop owner.</p>
+                                </div>
+                                <div className="flex flex-col space-y-4">
+                                    <button
+                                        onClick={() => setMode('setup')}
+                                        className="w-full py-6 bg-primary text-navy-900 rounded-[24px] font-black text-xl shadow-premium hover:bg-primary-hover hover:scale-[1.02] active:scale-95 transition-all"
+                                    >
+                                        Create New Store
+                                    </button>
+                                    {existingUsers.length > 0 && (
+                                        <button
+                                            onClick={() => setMode('login')}
+                                            className="w-full py-6 bg-navy-800 text-white border border-white/10 rounded-[24px] font-black text-xl hover:bg-navy-700 active:scale-95 transition-all"
+                                        >
+                                            Existing Store
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {mode === 'setup' && (
+                            <div className="bg-navy-800/80 backdrop-blur-3xl p-12 rounded-[48px] shadow-premium border border-white/5 space-y-8 animate-in slide-in-from-bottom-10 fade-in duration-500">
+                                <div className="space-y-2">
+                                    <h2 className="text-4xl font-black text-white">Setup Profile</h2>
+                                    <p className="text-slate-300 font-medium">Initialize your secure local environment.</p>
+                                </div>
+                                <form onSubmit={handleLaunch} className="space-y-6">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest pl-1">Admin Identity</label>
+                                            <input required type="text" placeholder="Full Name"
+                                                className="w-full bg-navy-900/50 border border-white/10 rounded-[20px] px-6 py-4 focus:ring-2 focus:ring-primary outline-none transition-all font-semibold text-white placeholder:text-slate-300/30"
+                                                value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest pl-1">Access Level</label>
+                                            <select className="w-full bg-navy-900/50 border border-white/10 rounded-[20px] px-6 py-4 focus:ring-2 focus:ring-primary outline-none transition-all font-semibold text-white custom-scrollbar"
+                                                value={form.role} onChange={e => setForm({ ...form, role: e.target.value })}>
+                                                <option value="Owner">Owner</option>
+                                                <option value="Manager">Manager</option>
+                                                <option value="Admin">Administrator</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest pl-1">Organization Name</label>
+                                        <input required type="text" placeholder="Store Name"
+                                            className="w-full bg-navy-900/50 border border-white/10 rounded-[20px] px-6 py-4 focus:ring-2 focus:ring-primary outline-none transition-all font-semibold text-white placeholder:text-slate-300/30"
+                                            value={form.shopName} onChange={e => setForm({ ...form, shopName: e.target.value })} />
+                                    </div>
+                                    <button
+                                        type="submit" disabled={isLoading}
+                                        className="w-full py-6 bg-primary text-navy-900 rounded-[24px] font-black text-xl shadow-premium hover:bg-primary-hover transition-all flex items-center justify-center space-x-3 group"
+                                    >
+                                        {isLoading ? <Icon name="loader-2" className="animate-spin" /> : <Icon name="zap" className="group-hover:animate-pulse" />}
+                                        <span>{isLoading ? 'Creating Environment...' : 'Initialize System'}</span>
+                                    </button>
+                                </form>
+                                <button onClick={() => setMode('welcome')} className="w-full text-slate-300/50 text-xs font-bold hover:text-white transition-colors uppercase tracking-widest">Back to Entry</button>
+                            </div>
+                        )}
+
+                        {mode === 'login' && (
+                            <div className="bg-white/70 backdrop-blur-3xl p-10 rounded-[48px] shadow-3xl border border-white text-center space-y-8 animate-in slide-in-from-bottom-10 fade-in duration-500 max-h-[80vh] flex flex-col">
+                                <div className="space-y-2">
+                                    <h2 className="text-3xl font-black text-slate-900">Choose Store</h2>
+                                    <p className="text-slate-500 font-medium">Select an existing local profile to resume.</p>
+                                </div>
+                                <div className="space-y-3 overflow-y-auto pr-2 custom-scrollbar">
+                                    {existingUsers.map(user => (
+                                        <button
+                                            key={user.userId}
+                                            onClick={() => handleSelectUser(user)}
+                                            className="w-full p-6 bg-slate-50 hover:bg-primary-50 border border-slate-100 hover:border-primary-200 rounded-3xl transition-all flex items-center space-x-4 group text-left"
+                                        >
+                                            <div className="w-12 h-12 bg-primary-600 rounded-2xl flex items-center justify-center text-white font-bold group-hover:scale-110 transition-transform">
+                                                {user.name ? user.name[0].toUpperCase() : '?'}
+                                            </div>
+                                            <div>
+                                                <p className="font-bold text-slate-900">{user.shopName}</p>
+                                                <p className="text-xs text-slate-500 font-medium">{user.name} • {user.role}</p>
+                                            </div>
+                                            <Icon name="chevron-right" className="ml-auto w-4 h-4 text-slate-300 group-hover:text-primary-600" />
+                                        </button>
+                                    ))}
+                                </div>
+                                <button onClick={() => setMode('welcome')} className="w-full text-slate-400 text-sm font-bold hover:text-slate-600 transition-colors pt-4 mt-auto">Return Home</button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        // --- App Shell ---
+
+        function App() {
+            const [activeTab, setActiveTab] = useState('dashboard');
+            const [products, setProducts] = useState([]);
+            const [sales, setSales] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [isLoggedIn, setIsLoggedIn] = useState(false);
+            const [profile, setProfile] = useState({ name: 'Guest', role: 'Viewer', shopName: 'StoreMind AI Shop' });
+            const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+
+            const refreshData = async (uid) => {
+                const targetUid = uid || profile.userId;
+                if (window.DB && targetUid) {
+                    const [p, s] = await Promise.all([
+                        window.DB.getFromIndex('products', 'userId', targetUid),
+                        window.DB.getFromIndex('sales', 'userId', targetUid)
+                    ]);
+                    setProducts(p || []);
+                    setSales(s || []);
+                    const userData = await window.DB.get('users', targetUid);
+                    if (userData) setProfile(userData);
+                }
+            };
+
+            useEffect(() => {
+                if (isLoggedIn && profile.userId) {
+                    refreshData();
+                }
+            }, [profile.userId, isLoggedIn]);
+
+            const handleLogout = () => {
+                localStorage.removeItem('invedictor_current_user_id');
+                setProfile({ name: 'Guest', role: 'Viewer', shopName: 'StoreMind AI Shop' });
+                setProducts([]);
+                setSales([]);
+                setIsLoggedIn(false);
+                setActiveTab('dashboard');
+                setIsProfileModalOpen(false);
+            };
+
+            const handleLoginSuccess = async (newProfile) => {
+                if (newProfile) {
+                    setProfile(newProfile);
+                    await refreshData(newProfile.userId);
+                } else {
+                    await refreshData();
+                }
+                setIsLoggedIn(true);
+            };
+
+            const handleSwitchAccount = async () => {
+                localStorage.removeItem('invedictor_current_user_id');
+                setProfile({ name: 'Guest', role: 'Viewer', shopName: 'StoreMind AI Shop' });
+                setProducts([]);
+                setSales([]);
+                setIsLoggedIn(false);
+                setIsProfileModalOpen(false);
+            };
+
+            const handleProfileUpdate = async (e) => {
+                e.preventDefault();
+                if (!profile.userId) return;
+                const updatedProfile = { ...profile };
+                await window.DB.put('users', updatedProfile);
+                setIsProfileModalOpen(false);
+                refreshData();
+            };
+
+            useEffect(() => {
+                const cleanupAndLoad = async () => {
+                    let attempts = 0;
+                    while (!window.DB && attempts < 20) {
+                        await new Promise(r => setTimeout(r, 100));
+                        attempts++;
+                    }
+
+                    if (window.DB) {
+                        // Check session
+                        const userId = localStorage.getItem('invedictor_current_user_id');
+                        if (userId) {
+                            const userData = await window.DB.get('users', userId);
+                            if (userData) {
+                                setProfile(userData);
+                                setIsLoggedIn(true);
+                                await refreshData(userId);
+                            }
+                        }
+
+                        // Cleanup negative stock
+                        const allProducts = await window.DB.getAll('products');
+                        const negativeProducts = allProducts.filter(p => p.currentStock < 0);
+                        if (negativeProducts.length > 0) {
+                            for (const p of negativeProducts) {
+                                p.currentStock = 0;
+                                await window.DB.put('products', p);
+                            }
+                        }
+                    } else {
+                        console.error("Database failed to initialize after 2 seconds.");
+                    }
+                    setLoading(false);
+                };
+                cleanupAndLoad();
+            }, []);
+
+            const renderContent = () => {
+                switch (activeTab) {
+                    case 'dashboard': return <Dashboard products={products} sales={sales} />;
+                    case 'products': return <ProductManager products={products} profile={profile} onRefresh={refreshData} />;
+                    case 'sales': return <SalesEntry products={products} sales={sales} profile={profile} onRefresh={refreshData} />;
+                    case 'predictions': return <PredictionView products={products} />;
+                    case 'reports': return <ReportsView products={products} sales={sales} />;
+                    case 'settings': return <SettingsView profile={profile} onLogout={handleLogout} onSwitch={handleSwitchAccount} />;
+                    default: return <div className="text-slate-500 italic">Coming Soon...</div>;
+                }
+            };
+
+            if (loading) return <div className="h-screen flex items-center justify-center"><div className="animate-spin text-primary-600"><Icon name="loader-2" className="w-10 h-10" /></div></div>;
+
+            return (
+                <div className="flex min-h-screen bg-slate-50">
+                    {/* Sidebar */}
+                    <aside className="w-72 bg-navy-900 border-r border-navy-700/50 p-6 flex flex-col fixed h-full z-50">
+                        <div className="flex items-center space-x-3 px-2 mb-10">
+                            <Logo className="w-10 h-10" />
+                            <span className="text-xl font-display font-bold tracking-tight text-white uppercase italic">StoreMind <span className="text-primary not-italic">AI</span></span>
+                        </div>
+
+                        <nav className="flex-1 space-y-2">
+                            <SidebarItem icon="layout-dashboard" label="Dashboard" id="dashboard" active={activeTab === 'dashboard'} onClick={setActiveTab} />
+                            <SidebarItem icon="package" label="Products" id="products" active={activeTab === 'products'} onClick={setActiveTab} />
+                            <SidebarItem icon="plus-circle" label="Log Sales" id="sales" active={activeTab === 'sales'} onClick={setActiveTab} />
+                            <SidebarItem icon="trending-up" label="Predictions" id="predictions" active={activeTab === 'predictions'} onClick={setActiveTab} />
+                            <SidebarItem icon="file-text" label="Reports" id="reports" active={activeTab === 'reports'} onClick={setActiveTab} />
+                        </nav>
+
+                        <div className="mt-auto space-y-4 pt-6 border-t border-white/5">
+                            <SidebarItem icon="settings" label="Settings" id="settings" active={activeTab === 'settings'} onClick={setActiveTab} />
+                            <div className="px-6 py-5 rounded-[20px] bg-navy-800 border border-white/5 shadow-inner">
+                                <div className="flex items-center space-x-2 mb-2">
+                                    <div className="w-2 h-2 bg-primary rounded-full animate-pulse"></div>
+                                    <p className="font-black text-[10px] text-white tracking-[0.2em] uppercase">Enterprise</p>
+                                </div>
+                                <p className="text-slate-300 text-[10px] font-bold opacity-60">Edge Computing Active</p>
+                            </div>
+                        </div>
+                    </aside>
+
+                    {/* Main Content */}
+                    <main className="flex-1 ml-72 p-12 bg-navy-900 min-h-screen">
+                        <header className="flex justify-between items-center mb-10 space-x-6">
+                            <div className="flex-1">
+                                <h2 className="text-primary font-black text-[10px] tracking-[0.3em] uppercase opacity-70 mb-1">Authenticated Environment</h2>
+                                <h3 className="text-2xl font-black text-white tracking-tight">{profile.shopName}</h3>
+                            </div>
+                            <div className="flex items-center space-x-8">
+                                <button className="text-slate-300 hover:text-primary transition-colors hover:scale-110 active:scale-90"><Icon name="bell" className="w-6 h-6" /></button>
+                                <button
+                                    onClick={() => setIsProfileModalOpen(true)}
+                                    className="flex items-center space-x-4 border-l border-white/10 pl-8 hover:bg-white/5 p-2 rounded-2xl transition-all group"
+                                >
+                                    <div className="text-right">
+                                        <p className="text-sm font-bold text-white group-hover:text-primary transition-colors">{profile.name}</p>
+                                        <p className="text-[10px] text-slate-300 uppercase underline decoration-primary/30 underline-offset-4 tracking-widest font-bold opacity-60">{profile.role}</p>
+                                    </div>
+                                    <div className="w-12 h-12 bg-navy-800 border border-white/10 rounded-2xl flex items-center justify-center text-primary font-black shadow-premium group-hover:border-primary/50 transition-all">
+                                        {profile.name.split(' ').map(n => n[0]).join('').toUpperCase()}
+                                    </div>
+                                </button>
+                            </div>
+                        </header>
+
+                        <div className="max-w-6xl mx-auto">
+                            {renderContent()}
+                        </div>
+
+                        {/* Profile Modal */}
+                        <Modal title="Edit Profile" isOpen={isProfileModalOpen} onClose={() => setIsProfileModalOpen(false)}>
+                            <form onSubmit={handleProfileUpdate} className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-semibold text-slate-700 mb-1">Shop Name</label>
+                                    <input required type="text" className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-primary-500 outline-none transition-all"
+                                        value={profile.shopName} onChange={e => setProfile({ ...profile, shopName: e.target.value })} />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-semibold text-slate-700 mb-1">Your Name</label>
+                                    <input required type="text" className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-primary-500 outline-none transition-all"
+                                        value={profile.name} onChange={e => setProfile({ ...profile, name: e.target.value })} />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-semibold text-slate-700 mb-1">Role</label>
+                                    <input required type="text" className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-primary-500 outline-none transition-all"
+                                        value={profile.role} onChange={e => setProfile({ ...profile, role: e.target.value })} />
+                                </div>
+                                <button type="submit" className="w-full bg-primary-600 text-white py-3 rounded-xl font-bold shadow-lg shadow-primary-200 mt-4 hover:bg-primary-700 transition-all">
+                                    Save Profile
+                                </button>
+                            </form>
+                            <div className="pt-6 border-t border-slate-100 mt-6 space-y-3">
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">Account Actions</p>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button onClick={handleSwitchAccount} className="flex items-center justify-center space-x-2 py-3 px-4 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm hover:bg-slate-50 transition-all">
+                                        <Icon name="users" className="w-4 h-4" />
+                                        <span>Switch</span>
+                                    </button>
+                                    <button onClick={handleLogout} className="flex items-center justify-center space-x-2 py-3 px-4 rounded-xl bg-red-50 text-red-600 font-bold text-sm hover:bg-red-100 transition-all">
+                                        <Icon name="log-out" className="w-4 h-4" />
+                                        <span>Log Out</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </Modal>
+                        {!isLoggedIn && <LoginView onLogin={handleLoginSuccess} />}
+                    </main>
+
+                    {/* AI Assistant */}
+                    <AIAssistant products={products} sales={sales} />
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+
+</html>
